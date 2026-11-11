@@ -1,12 +1,19 @@
 #!/bin/bash
 # ---------------------------------------------------------------------------
-# Entrypoint container — browser only, jalur start sependek mungkin.
+# Entrypoint container — browser only, TANPA password.
 #
-#   RDP mode : xrdp  on RDP_PORT  (default 3389)   -> sesi Chromium
-#   WEB mode : noVNC on HTTP_PORT (default 8080)   -> sesi Chromium
+#   RDP mode : xrdp  on RDP_PORT  (default 3389)   -> langsung masuk sesi Chromium
+#   WEB mode : noVNC on HTTP_PORT (default 8080)   -> halaman langsung connect
 #
-# Env: RDP_USER, RDP_PASSWORD, BROWSER_PASSWORD, RDP_PORT, HTTP_PORT,
-#      ENABLE_RDP, ENABLE_WEB, DEBUG
+# Tidak ada password di mana pun:
+#   - akun sistem dibuat "terkunci" (password hash '!')
+#   - xrdp dijalankan tanpa PAM (EnablePAMAuth=false) + sesi [Xorg] pakai
+#     username/password tetap -> form login xrdp dilewati (autorun)
+#   - noVNC tanpa password VNC (tanpa -rfbauth)
+#
+# Env opsional:
+#   ACCESS_TOKEN=<rahasia>   kunci akses sederhana (URL ?token=... atau cookie)
+#   AUTH_PROXY=u:p@host:port proxy ber-bayar untuk publik (basic auth di proxy)
 # ---------------------------------------------------------------------------
 set -u
 
@@ -15,22 +22,70 @@ HTTP_PORT="${HTTP_PORT:-8080}"
 ENABLE_RDP="${ENABLE_RDP:-1}"
 ENABLE_WEB="${ENABLE_WEB:-1}"
 DEBUG="${DEBUG:-0}"
+ACCESS_TOKEN="${ACCESS_TOKEN:-}"
+AUTH_PROXY="${AUTH_PROXY:-}"
+RDP_INI=/etc/xrdp/xrdp.ini
+SESMAN_INI=/etc/xrdp/sesman.ini
 
-# ---- kredensial ------------------------------------------------------------
-RDP_USER_NAME="${RDP_USER:-root}"
-RDP_USER_PASS="${RDP_PASSWORD:-root}"
-if [ "$RDP_USER_NAME" != "root" ] && ! id "$RDP_USER_NAME" >/dev/null 2>&1; then
-    useradd -m -s /bin/bash "$RDP_USER_NAME"
+# ---- akun sistem tanpa password yang bisa dipakai login --------------------
+if ! id chromium >/dev/null 2>&1; then
+    useradd -m -s /bin/bash chromium 2>/dev/null || true
 fi
-echo "${RDP_USER_NAME}:${RDP_USER_PASS}" | chpasswd
-HOME_DIR="$(getent passwd "$RDP_USER_NAME" | cut -d: -f6)"
-[ -n "${HOME_DIR:-}" ] || HOME_DIR=/root
-[ -f "${HOME_DIR}/.xsession" ] || { echo "browser-session" > "${HOME_DIR}/.xsession"; chmod 700 "${HOME_DIR}/.xsession"; }
+# password hash '!' = akun terkunci (tidak ada yang bisa login pakai password)
+usermod -p '!' chromium 2>/dev/null || true
 
-# ---- port xrdp (hanya ditulis kalau beda) ----------------------------------
-if [ -f /etc/xrdp/xrdp.ini ] && ! grep -qE "^port=${RDP_PORT}$" /etc/xrdp/xrdp.ini; then
-    sed -i -E "0,/^[#;[:space:]]*port=.*/s//port=${RDP_PORT}/" /etc/xrdp/xrdp.ini
+HOME_DIR=/home/chromium
+mkdir -p "${HOME_DIR}/.config" "${HOME_DIR}/Downloads"
+echo "browser-session" > "${HOME_DIR}/.xsession"
+chown -R chromium:chromium "${HOME_DIR}" 2>/dev/null || true
+chmod 700 "${HOME_DIR}/.xsession"
+[ -f /root/.xsession ] || { echo "browser-session" > /root/.xsession; chmod 700 /root/.xsession; }
+
+# ---- xrdp: tanpa PAM, sesi tanpa tanya kredensial, port dari env -----------
+if [ -f "$RDP_INI" ]; then
+    sed -i -E "0,/^[#;[:space:]]*port=.*/s//port=${RDP_PORT}/" "$RDP_INI"
+
+    # [Globals] autorun=Xorg  -> langsung ke sesi, tidak lewat pemilihan sesi
+    if grep -qE '^autorun=' "$RDP_INI"; then
+        sed -i -E 's|^autorun=.*|autorun=Xorg|' "$RDP_INI"
+    else
+        sed -i -E '0,/^\[Globals\]/s//[Globals]\nautorun=Xorg/' "$RDP_INI"
+    fi
+
+    # hanya section [Xorg] yang aktif: username/password tetap, tidak "ask"
+    awk '
+        BEGIN { inx = 0 }
+        /^\[Xorg\]/ { inx = 1; print; next }
+        /^\[/ { inx = 0 }
+        inx && /^username=/ { print "username=chromium"; next }
+        inx && /^password=/ { print "password=chromium"; next }
+        { print }
+    ' "$RDP_INI" > "${RDP_INI}.tmp" && cat "${RDP_INI}.tmp" > "$RDP_INI"
+    rm -f "${RDP_INI}.tmp"
 fi
+
+# sesman: jangan pakai PAM (akun terkunci), izinkan root, sesi tidak dimatikan
+if [ -f "$SESMAN_INI" ]; then
+    for kv in "EnablePAMAuth=false" "AllowRootLogin=true" "KillDisconnected=false" \
+              "DisconnectedTimeLimit=0" "IdleTimeLimit=0"; do
+        k="${kv%%=*}"
+        if grep -qE "^${k}=" "$SESMAN_INI"; then
+            sed -i -E "0,/^${k}=.*/s//${kv}/" "$SESMAN_INI"
+        else
+            sed -i -E "0,/^\[Globals\]/s//[Globals]\n${kv}/" "$SESMAN_INI"
+        fi
+    done
+fi
+
+# ---- proxy autentikasi opsional (dipakai startwm.sh) -----------------------
+rm -f /etc/xrdp/authproxy.conf
+if [ -n "$AUTH_PROXY" ]; then
+    echo "AUTH_PROXY=${AUTH_PROXY}" > /etc/xrdp/authproxy.conf
+    chmod 600 /etc/xrdp/authproxy.conf
+    export http_proxy="http://${AUTH_PROXY}" https_proxy="http://${AUTH_PROXY}"
+    export HTTP_PROXY="$http_proxy" HTTPS_PROXY="$https_proxy"
+fi
+export ACCESS_TOKEN
 
 # ---- bersihkan state lama (restart-safe) -----------------------------------
 rm -f /var/run/xrdp/*.pid /run/xrdp/*.pid /var/run/xrdp-sesman.pid \
@@ -42,10 +97,11 @@ chmod 1777 /tmp/.X11-unix; chmod 700 /run/user/0 2>/dev/null || true
 # ---- profil browser persisten kalau ada volume -----------------------------
 if [ -d /data ]; then
     mkdir -p /data/chromium-profile /data/Downloads
-    chown -R "${RDP_USER_NAME}:" /data 2>/dev/null || true
-    mkdir -p "${HOME_DIR}/.config"
-    [ -L "${HOME_DIR}/.config/chromium" ] || { rm -rf "${HOME_DIR}/.config/chromium"; ln -sfn /data/chromium-profile "${HOME_DIR}/.config/chromium"; }
-    [ -L "${HOME_DIR}/Downloads" ] || { rm -rf "${HOME_DIR}/Downloads"; ln -sfn /data/Downloads "${HOME_DIR}/Downloads"; }
+    chown -R chromium:chromium /data 2>/dev/null || true
+    [ -L "${HOME_DIR}/.config/chromium" ] || { rm -rf "${HOME_DIR}/.config/chromium"; \
+        ln -sfn /data/chromium-profile "${HOME_DIR}/.config/chromium"; }
+    [ -L "${HOME_DIR}/Downloads" ] || { rm -rf "${HOME_DIR}/Downloads"; \
+        ln -sfn /data/Downloads "${HOME_DIR}/Downloads"; }
 fi
 
 # ---- sysctl (diabaikan host yang memblokir) --------------------------------
@@ -60,7 +116,7 @@ pgrep -x pulseaudio >/dev/null || \
     pulseaudio --system --daemonize=yes --disallow-exit --exit-idle-time=-1 \
                -n --file=/etc/pulse/default.pa >/dev/null 2>&1 || mkdir -p /run/pulse
 
-# ---- web (noVNC) -----------------------------------------------------------
+# ---- web (noVNC tanpa password) -------------------------------------------
 start_web() {
     pgrep -f "websockify.*${HTTP_PORT}" >/dev/null && return 0
     setsid nohup /usr/local/bin/web-entry >>/var/log/web.log 2>&1 < /dev/null &
@@ -75,16 +131,16 @@ start_rdp() {
 [ "$ENABLE_WEB" = "1" ] && start_web
 [ "$ENABLE_RDP" = "1" ] && start_rdp
 
-# banner ringkas (satu echo, bukan lima)
 VER="$(/usr/local/bin/chromium-rdp --version 2>/dev/null || echo chromium)"
 echo "=============================================================="
-echo " Chromium Browser · user=${RDP_USER_NAME} · rdp=$([ "$ENABLE_RDP" = 1 ] && echo "$RDP_PORT" || echo off) · web=$([ "$ENABLE_WEB" = 1 ] && echo "$HTTP_PORT" || echo off)"
+echo " Chromium Browser · TANPA PASSWORD · rdp=$([ "$ENABLE_RDP" = 1 ] && echo "$RDP_PORT" || echo off) · web=$([ "$ENABLE_WEB" = 1 ] && echo "$HTTP_PORT" || echo off)"
 echo " ${VER}"
+[ -n "$ACCESS_TOKEN" ] && echo " Akses dilindungi ACCESS_TOKEN (URL: /?token=...)"
 echo "=============================================================="
 
 [ "$DEBUG" = "1" ] && { touch /var/log/web.log; tail -n +1 -F /var/log/xrdp.log /var/log/xrdp-sesman.log /var/log/web.log 2>/dev/null & }
 
-# ---- watchdog ringan (3s, tanpa fork berlebihan) ---------------------------
+# ---- watchdog ringan -------------------------------------------------------
 while :; do
     sleep 3
     if [ "$ENABLE_RDP" = "1" ] && { ! pgrep -x xrdp >/dev/null || ! pgrep -x xrdp-sesman >/dev/null; }; then

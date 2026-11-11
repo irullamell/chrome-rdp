@@ -19,6 +19,9 @@ export XDG_RUNTIME_DIR
 [ -S /run/pulse/native ] && export PULSE_SERVER=unix:/run/pulse/native
 
 # profil terpisah per entrypoint (web vs RDP) supaya tidak saling lock
+if [ -z "${BROWSER_PROFILE:-}" ] && [ "$(id -un)" != "root" ]; then
+    BROWSER_PROFILE="$HOME/.config/chromium-rdp"
+fi
 if [ -n "${BROWSER_PROFILE:-}" ]; then
     mkdir -p "$BROWSER_PROFILE"
     export CHROMIUM_FLAGS="${CHROMIUM_FLAGS:-} --user-data-dir=${BROWSER_PROFILE}"

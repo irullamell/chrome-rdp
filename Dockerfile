@@ -17,6 +17,9 @@ ARG WITH_WEB=1
 ARG WITH_CJK_FONTS=1
 ARG WITH_UBLOCK=1
 ARG RDP_MAX_BPP=24
+# Passwordless: sesi xrdp tidak lewat PAM sama sekali.
+# Set --build-arg RDP_PAM=1 kalau ingin login pakai password (mode lama).
+ARG RDP_PAM=0
 
 ENV DEBIAN_FRONTEND=noninteractive \
     LANG=C.UTF-8 \
@@ -126,7 +129,13 @@ COPY startwm.sh /etc/xrdp/startwm.sh
 RUN set -eux; \
     chmod 755 /usr/local/bin/browser-session /etc/xrdp/startwm.sh; \
     echo "browser-session" > /root/.xsession; chmod 700 /root/.xsession; \
-    mkdir -p /root/.config/chromium /root/Downloads
+    mkdir -p /root/.config/chromium /root/Downloads; \
+    # akun sesi tanpa password yang bisa dipakai login (hash '!' = terkunci) \
+    id chromium >/dev/null 2>&1 || useradd -m -s /bin/bash chromium; \
+    usermod -p '!' chromium; \
+    mkdir -p /home/chromium/.config /home/chromium/Downloads; \
+    echo "browser-session" > /home/chromium/.xsession; chmod 700 /home/chromium/.xsession; \
+    chown -R chromium:chromium /home/chromium
 
 # ---------------------------------------------------------------------------
 # xrdp: TLS + tuning cepat, sertifikat self-signed sekali bikin
@@ -134,6 +143,11 @@ RUN set -eux; \
 COPY tune-ini.sh /tmp/tune-ini.sh
 RUN set -eux; \
     chmod +x /tmp/tune-ini.sh; RDP_MAX_BPP="${RDP_MAX_BPP}" /tmp/tune-ini.sh; rm -f /tmp/tune-ini.sh; \
+    if [ "$RDP_PAM" = "0" ]; then \
+        sed -i -E 's/^EnablePAMAuth=.*/EnablePAMAuth=false/' /etc/xrdp/sesman.ini; \
+        grep -qE '^EnablePAMAuth=' /etc/xrdp/sesman.ini || \
+            sed -i -E '0,/^\[Globals\]/s//[Globals]\nEnablePAMAuth=false/' /etc/xrdp/sesman.ini; \
+    fi; \
     xrdp-keygen xrdp /etc/xrdp/rsakeys.ini >/dev/null 2>&1 || true; \
     if [ ! -s /etc/xrdp/cert.pem ] || [ ! -s /etc/xrdp/key.pem ]; then \
         umask 077; \

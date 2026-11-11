@@ -7,15 +7,16 @@ services:
         WITH_CJK_FONTS: "1"
         WITH_UBLOCK: "1"
         RDP_MAX_BPP: "24"
+        RDP_PAM: "0"      # "1" = kembali ke mode login password
     image: railway-chromium-browser
     container_name: chromium-browser
     ports:
       - "3389:3389"   # RDP
       - "8080:8080"   # Web / noVNC
+    # Tanpa password: tidak ada BROWSER_PASSWORD / RDP_PASSWORD sama sekali.
     environment:
-      BROWSER_PASSWORD: root
-      RDP_PASSWORD: root
-      RDP_USER: root
+      # ACCESS_TOKEN: rahasia123   # opsional, kunci akses web
+      # AUTH_PROXY: user:pass@host:port   # opsional, proxy ber-bayar
       HTTP_PORT: "8080"
       RDP_PORT: "3389"
       SCREEN: 1600x900x24
