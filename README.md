@@ -59,6 +59,26 @@ Chromium di dalam container sering "setengah jalan" (WebGL mati, suara tidak kel
 
 ---
 
+## 🧪 Bukti uji (Chromium dari launcher ini)
+
+Screenshot diambil langsung dengan `chromium.sh` (flag `--headless=new`), bukan mockup:
+
+| | |
+|---|---|
+| ![WebGL](preview/bukti-webgl.png) | Halaman `get.webgl.org` → **"Your browser supports WebGL"**, kubus 3D ter-render (SwiftShader, tanpa GPU) |
+| ![Render](preview/bukti-chromium-tampil.png) | Halaman web ter-render penuh, font Latin/Arab/CJK/Rusia/Spanyol tampil normal |
+
+Hasil `canPlayType` dari browser yang sama:
+
+```
+video/mp4 avc1  = probably      video/webm vp9 = probably
+video/webm vp8  = probably      video/mp4 av01 = probably
+audio/mpeg      = probably      audio/mp4 aac  = probably
+audio/ogg opus  = probably      WebGL2         = true
+```
+
+---
+
 ## 🔐 Login
 
 | Field | Default | Bisa diubah lewat |
