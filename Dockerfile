@@ -34,7 +34,10 @@ ENV DEBIAN_FRONTEND=noninteractive \
     # glibc: 2 arena => RSS Chromium jauh lebih kecil di container kecil
     MALLOC_ARENA_MAX=2 \
     # Python (websockify) tidak perlu menulis .pyc
-    PYTHONDONTWRITEBYTECODE=1
+    PYTHONDONTWRITEBYTECODE=1 \
+    # anti "Aw, Snap": jangan biarkan Chromium memakai /dev/shm kecil
+    CHROMIUM_USE_TMPFS_CACHE=1 \
+    SHM_MIN_MB=512
 
 # Buang dokumen/man/lintian/info saat install (tidak dipakai browser, hemat ~100 MB).
 # copyright tetap dipertahankan (wajib untuk lisensi Debian).

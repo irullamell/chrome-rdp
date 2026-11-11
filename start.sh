@@ -94,6 +94,23 @@ mkdir -p /var/run/xrdp /run/xrdp /tmp/.X11-unix /run/pulse /run/user/0 /var/log
 chmod 1777 /tmp/.X11-unix; chmod 700 /run/user/0 2>/dev/null || true
 [ -s /var/lib/dbus/machine-id ] || dbus-uuidgen > /var/lib/dbus/machine-id
 
+# ---- /dev/shm & /tmp: penyebab #1 "Aw, Snap" di container -------------------
+# shm_size di Railway/compose sering hanya 64 MB -> Chromium langsung crash.
+# Kalau /dev/shm kecil, pasang tmpfs yang lebih besar DI ATASNYA (butuh
+# CAP_SYS_ADMIN; kalau ditolak, launcher sudah memakai --disable-dev-shm-usage).
+shm_mb() { df -m /dev/shm 2>/dev/null | awk 'NR==2 {print $2}'; }
+SHM_NOW="$(shm_mb)"
+if [ -n "${SHM_NOW:-}" ] && [ "$SHM_NOW" -lt "${SHM_MIN_MB:-512}" ] 2>/dev/null; then
+    TARGET=1024
+    if mount -t tmpfs -o "size=${TARGET}m,mode=1777" tmpfs /dev/shm 2>/dev/null; then
+        echo "[init] /dev/shm diperbesar ${SHM_NOW}MB -> ${TARGET}MB"
+    else
+        echo "[init] /dev/shm hanya ${SHM_NOW}MB (tidak bisa mount) -> mode hemat shm aktif"
+    fi
+fi
+# cache Chromium di /tmp; kalau /tmp bukan tmpfs, tetap aman (disk container)
+mkdir -p /tmp/chromium-cache && chmod 1777 /tmp/chromium-cache 2>/dev/null || true
+
 # ---- profil browser persisten kalau ada volume -----------------------------
 if [ -d /data ]; then
     mkdir -p /data/chromium-profile /data/Downloads

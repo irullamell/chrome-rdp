@@ -73,6 +73,42 @@ GET /websockify?token=rahasia123 -> HTTP/1.1 101 Switching Protocols
 
 ---
 
+## 🩹 Kalau muncul **"Aw, Snap!"**
+
+"Aw, Snap" = proses renderer Chromium dibunuh. Di container ada 4 penyebab, dan versi ini sudah menangani keempatnya secara otomatis:
+
+| Penyebab | Penanganan di image ini |
+|---|---|
+| **1. RAM container habis (OOM killer)** | launcher membaca limit cgroup → `--renderer-process-limit` (2–6), `--js-flags=--max-old-space-size` (128–512 MB), `--process-per-site` untuk RAM ≤1 GB |
+| **2. `/dev/shm` cuma 64 MB** | `--disable-dev-shm-usage` **dan** `start.sh` mencoba me-mount tmpfs 1 GB di atas `/dev/shm` (kalau diizinkan), kalau tidak tetap aman |
+| **3. Backing store / cache memakan RAM** | cache disk 1/16 RAM (64–256 MB), media cache 32 MB, `--force-gpu-mem-available-mb=64`, `AutomaticTabDiscarding`, `MemoryPressurePressureSignals` |
+| **4. Terlalu banyak proses renderer** | batas proses + 1 proses per situs (mode RAM kecil) + `MALLOC_ARENA_MAX=2` |
+
+Cek cepat di container:
+
+```bash
+# berapa RAM yang dilihat Chromium + profil yang dipilih
+docker exec -it <container> /usr/local/bin/chromium-rdp --version   # → baris [chromium] RAM=... renderers=... heap=...
+# /dev/shm sudah dibesarkan?
+docker exec -it <container> df -h /dev/shm
+# proses renderer & pemakaian memori
+docker exec -it <container> ps -eo rss,args | grep type=renderer
+```
+
+Kalau masih muncul (biasanya karena RAM plan Railway sangat kecil):
+
+| Gejala | Set ini |
+|---|---|
+| Plan 512 MB – 1 GB | `CHROMIUM_LOW_RAM=1`, `SCREEN=1280x720x24`, `CHROMIUM_RENDERER_LIMIT=2` |
+| Crash saat buka video/WebGL | `CHROMIUM_DISABLE_GPU=1` (WebGL mati, browsing biasa tetap jalan) |
+| Crash saat buka banyak tab | `CHROMIUM_HEAP_MB=192`, `CHROMIUM_RENDERER_LIMIT=2` |
+| Crash saat scroll halaman panjang | `SCREEN=1280x720x24` (backing store VNC ikut turun) |
+| Selalu crash di satu situs tertentu | biasanya butuh memori > heap; naikkan `CHROMIUM_HEAP_MB` **dan** RAM service |
+
+> Naikkan RAM service adalah solusi paling pasti: Chromium butuh ±350–500 MB per renderer aktif. Dengan 1 GB, 2 tab berat sudah mentok.
+
+---
+
 ## 🎯 Fokus: browser saja
 
 | Ada | Tidak ada |
@@ -144,7 +180,10 @@ GET /websockify?token=rahasia123 -> HTTP/1.1 101 Switching Protocols
 | `CHROMIUM_CACHE_SIZE` | `268435456` | Disk cache (byte) |
 | `CHROMIUM_MEDIA_CACHE_SIZE` | `67108864` | Cache media (byte) |
 | `CHROMIUM_RENDERER_LIMIT` | `3` | Maks proses renderer |
-| `CHROMIUM_LOW_RAM` | `0` | `1` = mode hemat RAM |
+| `CHROMIUM_LOW_RAM` | `auto` | `1` = hemat RAM (otomatis aktif kalau RAM ≤1 GB) |
+| `CHROMIUM_HEAP_MB` | otomatis (1/4 RAM, 128–512) | Batas heap V8 per renderer → kunci anti "Aw, Snap" |
+| `CHROMIUM_DISABLE_GPU` | `0` | `1` = matikan GPU process total (kalau GPU yang crash) |
+| `SHM_MIN_MB` | `512` | Ambang minimum `/dev/shm`; di bawah ini start.sh mencoba mount tmpfs |
 | `VNC_SPEED` | `lan` | Preset x11vnc: `lan`/`fast`/`medium`/`slow` |
 | `VNC_POLL` | `40` | ms; naikkan untuk CPU lebih hemat |
 | `DEBUG` | `0` | `1` = tampilkan log di stdout |
@@ -245,7 +284,7 @@ Di Railway: **Settings → Build → Build Args**.
 | Layar web lambat | `SCREEN=1280x720x24`, `VNC_SPEED=medium`, `VNC_POLL=60` |
 | RDP tidak connect | TCP Proxy port `3389` sudah dibuat? Port di klien = port proxy Railway |
 | Chromium tidak muncul | `tail /var/log/xrdp-sesman.log`; pastikan `~/.xsession` berisi `browser-session` |
-| Tab crash "Aw, Snap" | Tambah RAM / `--shm-size=1g` |
+| Tab crash "Aw, Snap" | Lihat bagian **🩹 Kalau muncul "Aw, Snap!"** di atas — biasanya RAM plan terlalu kecil |
 | Download hilang saat redeploy | Mount volume ke `/data` |
 
 Log: `DEBUG=1` lalu lihat stdout Railway, atau `docker exec -it <c> tail -f /var/log/web.log /var/log/xrdp-sesman.log`.
