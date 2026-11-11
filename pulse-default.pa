@@ -1,7 +1,7 @@
 #!/usr/bin/pulseaudio -nF
 #
 # System-wide PulseAudio for a container. xrdp-chansrv (MS-RDPEA) plugs into
-# this so RDP clients get real audio; Chromium and Wine play into the null sink
+# this so RDP clients get real audio; Chromium plays into the null sink
 # when no RDP client is connected.
 
 # Create the runtime socket that xrdp and the pulse client conf point at.

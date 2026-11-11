@@ -1,14 +1,13 @@
 <div align="center">
 
-# 🚀 DEBIAN XRDP · FAST EDITION
+# 🌐 RAILWAY CHROMIUM · BROWSER ONLY
 
-### Deploy di Railway · **Chromium native** · Remote Desktop super cepat
+### Chromium fullscreen di server · akses lewat **RDP** atau **langsung dari browser (noVNC)**
 
 ![Debian](https://img.shields.io/badge/Debian-12_Bookworm-A81D33?style=for-the-badge&logo=debian&logoColor=white)
-![XFCE](https://img.shields.io/badge/Desktop-XFCE4-2284F2?style=for-the-badge&logo=xfce&logoColor=white)
-![Chromium](https://img.shields.io/badge/Browser-Chromium_100%25-4285F4?style=for-the-badge&logo=chromium&logoColor=white)
+![Chromium](https://img.shields.io/badge/Chromium-Only-4285F4?style=for-the-badge&logo=chromium&logoColor=white)
+![noVNC](https://img.shields.io/badge/Web-noVNC-EA4335?style=for-the-badge&logo=html5&logoColor=white)
 ![Railway](https://img.shields.io/badge/Deploy-Railway-0B0D0E?style=for-the-badge&logo=railway&logoColor=white)
-![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker&logoColor=white)
 
 **Developer: SHADOW HEX ~ REAL**
 
@@ -19,76 +18,44 @@
 
 ---
 
-## 🔥 Yang berubah di versi ini
+## 🎯 Fokus: browser saja
 
-| Sebelum | Sekarang |
+Image ini **bukan** desktop penuh. Yang ada di dalamnya cuma satu hal: **Chromium**.
+
+| Ada | Tidak ada lagi (dibuang) |
 |---|---|
-| Google Chrome (file `.deb` dari dl.google.com) | **Chromium native Debian** — tanpa download `.deb`, ikut update security Debian |
-| Base `debian:bullseye` (EOL, harus pakai `archive.debian.org` + hack `Check-Valid-Until`) | **`debian:bookworm-slim`** (LTS sampai 2028) — `apt update` normal, tanpa hack |
-| Browser di-patch manual (`mv google-chrome`) | **Launcher terpisah** `chromium-rdp` + `update-alternatives`, desktop icon otomatis |
-| Tanpa TLS, tanpa audio RDP | **TLS 1.2/1.3**, clipboard, drive redirection, audio PulseAudio |
-| Password & port hard-code | Bisa diubah lewat **Environment Variables** di Railway |
+| Chromium (versi Debian terbaru, ikut update security) | ❌ XFCE / xfce4-panel / Thunar / terminal |
+| Window manager mini (openbox) — hanya agar jendela penuh & fokus | ❌ Wine & wine32 |
+| WebGL via SwiftShader (tanpa GPU) | ❌ xfce4-goodies, compositor, screensaver |
+| Audio PulseAudio | ❌ aplikasi office / media player / games |
+| uBlock Origin (opsi aktif) | ❌ LibreOffice, GIMP, dll |
+| Akses **RDP** (3389) **dan** **Web/noVNC** (8080) | ❌ konfigurasi desktop yang tidak perlu |
 
-> Chrome **tidak** dipakai lagi. Semua yang tadinya jalan di Chrome sekarang jalan di Chromium, termasuk WebGL, audio, clipboard, upload/download, print, dan video.
-
----
-
-## ✅ Dukungan "100%" — apa saja yang sudah dites jalan
-
-Chromium di dalam container sering "setengah jalan" (WebGL mati, suara tidak keluar, tab crash, password tidak tersimpan). Semua penyebabnya sudah ditangani:
-
-| Fitur | Status | Bagaimana ditangani |
-|---|---|---|
-| Browsing normal, tab, bookmark | ✅ | Normal |
-| **WebGL / WebGL2 / Canvas 3D** (game, Figma, Maps 3D) | ✅ | `--use-angle=swiftshader` + `--enable-unsafe-swiftshader` (software GL, tanpa GPU) |
-| **Video YouTube / MP4 / WebM / H.264** | ✅ | Codec Debian Chromium + `libopenh264` |
-| **Audio browser** (YouTube, Spotify web) | ✅ | PulseAudio system-wide `unix:/run/pulse/native` |
-| **Audio RDP** (suara sampai ke client) | ✅ | `xrdp-chansrv` + modul `module-xrdp-sink` (auto kalau tersedia) |
-| **Clipboard copy/paste 2 arah** | ✅ | Channel `cliprdr` (`allow_channels=true`) |
-| **Download & upload file** | ✅ | Folder `/root/Downloads` (bisa dipersist ke volume `/data`) |
-| **Print ke PDF / printer** | ✅ | `PrintingEnabled=true` |
-| **Password manager + autofill** | ✅ | `--password-store=basic` (tanpa keyring) + policy aktif |
-| **Emoji & font Asia** | ✅ | `fonts-noto-color-emoji`, `fonts-noto-cjk`, `fonts-noto-core` |
-| **Zoom / video call di browser** | ✅ | Kamera virtual: pakai `--use-fake-device-for-media-stream` atau `/dev/video0` kalau ada |
-| **Multi-monitor & resize window** | ✅ | Backend `xorgxrdp` + `allow_multimon=true` |
-| **Warna akurat (tidak kusam)** | ✅ | `max_bpp=24` + `--force-color-profile=srgb` |
-| **Zoom HiDPI** | ✅ | XFCE 96 dpi + zoom bawaan Chromium |
-| **Wine (.exe Windows)** | ✅ | `wine` + `wine32` (matikan dengan `ENABLE_WINE=0`) |
-| **Netflix / DRM (Widevine)** | ⚠️ | Chromium Debian tidak membawa Widevine. Untuk DRM: `ENABLE_WINE` + Chrome di dalam Wine, atau pakai build Chromium ber-Widevine |
-| **Akselerasi GPU** | ⚠️ | Railway tidak punya GPU → otomatis software (SwiftShader), tetap mulus untuk web ringan–menengah |
+Hasilnya: **image jauh lebih kecil**, build lebih cepat, RAM lebih lega untuk tab browser (Chromium sendiri butuh ±700 MB untuk 5–8 tab).
 
 ---
 
-## 🧪 Bukti uji (Chromium dari launcher ini)
+## 🚪 Dua cara masuk
 
-Screenshot diambil langsung dengan `chromium.sh` (flag `--headless=new`), bukan mockup:
+### 1️⃣ Lewat browser — tanpa aplikasi apa pun (noVNC)
+Buka domain Railway kamu di browser → muncul halaman login → masukkan password → **Chromium langsung terbuka di tab**.
+Cocok untuk HP, tablet, Chromebook, atau komputer kantor yang dilarang install aplikasi.
+
+### 2️⃣ Lewat klien RDP — paling mulus & paling cepat
+`mstsc` (Windows), RD Client (Android), Remmina / Windows App (Mac/Linux) → connect ke TCP Proxy Railway.
+Begitu login, yang muncul langsung Chromium fullscreen — tidak ada desktop, tidak ada menu.
+
+---
+
+## 🧪 Sudah diuji (bukan mockup)
 
 | | |
 |---|---|
-| ![WebGL](preview/bukti-webgl.png) | Halaman `get.webgl.org` → **"Your browser supports WebGL"**, kubus 3D ter-render (SwiftShader, tanpa GPU) |
-| ![Render](preview/bukti-chromium-tampil.png) | Halaman web ter-render penuh, font Latin/Arab/CJK/Rusia/Spanyol tampil normal |
+| ![Sesi browser](preview/bukti-browser-session.png) | Sesi nyata: **Chromium fullscreen tanpa dekorasi**, halaman ter-render, font Arab/CJK/Rusia normal |
+| ![Login noVNC](preview/bukti-novnc-login.png) | Halaman login noVNC (`index.html`) |
+| ![WebGL](preview/bukti-webgl.png) | `get.webgl.org` → "Your browser supports WebGL", kubus 3D ter-render |
 
-Hasil `canPlayType` dari browser yang sama:
-
-```
-video/mp4 avc1  = probably      video/webm vp9 = probably
-video/webm vp8  = probably      video/mp4 av01 = probably
-audio/mpeg      = probably      audio/mp4 aac  = probably
-audio/ogg opus  = probably      WebGL2         = true
-```
-
----
-
-## 🔐 Login
-
-| Field | Default | Bisa diubah lewat |
-|---|---|---|
-| **Username** | `root` | `RDP_USER` |
-| **Password** | `root` | **`RDP_PASSWORD`** ← wajib diganti! |
-| **Port RDP** | `3389` | `RDP_PORT` |
-| **Host** | dari Railway TCP Proxy | — |
-
-> ⚠️ **Keamanan:** jangan deploy publik dengan `root/root`. Di Railway cukup buka tab **Variables** lalu tambahkan `RDP_PASSWORD` (dan `RDP_USER` kalau mau user lain). Tidak perlu edit file.
+Uji yang dijalankan di sandbox: `Xvfb → openbox → Chromium` + `x11vnc → websockify` jalan bersama; `http://127.0.0.1:8080/` → **200**, `/vnc.html` → **200**, `/core/rfb.js` → **200**; WebSocket `6080 → 5900` aktif; Chromium ter-render penuh (screenshot diambil dari framebuffer X yang sama dengan yang dikirim ke VNC).
 
 ---
 
@@ -96,13 +63,41 @@ audio/ogg opus  = probably      WebGL2         = true
 
 | Variable | Default | Fungsi |
 |---|---|---|
-| `RDP_USER` | `root` | Username login (dibuat otomatis kalau belum ada, masuk grup sudo) |
-| `RDP_PASSWORD` | `root` | Password login |
-| `RDP_PORT` | `3389` | Port listener xrdp (samakan dengan TCP Proxy) |
-| `ENABLE_WINE` (build arg) | `1` | `0` = image lebih kecil tanpa Wine |
-| `CHROMIUM_FLAGS` | – | Flag tambahan, contoh `--incognito --lang=id` |
+| `BROWSER_PASSWORD` | `root` | **Password untuk login noVNC** (wajib diganti) |
+| `RDP_PASSWORD` | `root` | Password login RDP (kalau `BROWSER_PASSWORD` kosong, ini dipakai untuk web juga) |
+| `RDP_USER` | `root` | Username RDP |
+| `HTTP_PORT` | `8080` | Port web/noVNC (Railway: **Generate Domain** ke port ini) |
+| `RDP_PORT` | `3389` | Port listener xrdp (Railway: **TCP Proxy** ke port ini) |
+| `ENABLE_RDP` | `1` | `0` = matikan RDP, web saja |
+| `ENABLE_WEB` | `1` | `0` = matikan noVNC, RDP saja |
+| `START_URL` | – | Tab pertama, contoh `https://youtube.com` |
+| `SCREEN` | `1600x900x24` | Resolusi layar virtual (mode web/noVNC) |
+| `BROWSER_LANG` | – | Bahasa UI, contoh `id` |
+| `CHROMIUM_FLAGS` | – | Flag tambahan, contoh `--incognito` |
 | `CHROMIUM_PROXY` | – | Proxy browser, contoh `socks5://user:pass@host:port` |
 | `CHROMIUM_CACHE_SIZE` | `536870912` | Ukuran disk cache (byte) |
+
+---
+
+## 🚂 Deploy ke Railway
+
+**1️⃣ Upload semua file** ke repo GitHub baru.
+
+**2️⃣** [railway.app](https://railway.app) → **New Project** → **Deploy from GitHub repo** → pilih repo.
+`railway.json` sudah disiapkan, Railway langsung pakai `Dockerfile`.
+
+**3️⃣ Variables** (minimal ini):
+
+```
+BROWSER_PASSWORD = passwordkuat123
+```
+
+**4️⃣ Pilih cara akses:**
+
+- **Web (cara termudah)** → Settings → Networking → **Generate Domain** → target port **`8080`** → buka domain itu di browser.
+- **RDP** → Settings → Networking → **TCP Proxy** → target port **`3389`** → dapat `host.proxy.rlwy.net:12345`.
+
+Boleh keduanya sekaligus.
 
 ---
 
@@ -110,67 +105,21 @@ audio/ogg opus  = probably      WebGL2         = true
 
 ```
 Railway-Fast-Rdp/
-├── Dockerfile          # Debian 12 + XFCE + Chromium + xrdp + (Wine)
-├── start.sh            # Entrypoint: kredensial, port, dbus, PulseAudio, xrdp + watchdog
-├── startwm.sh          # Sesi XRDP → XFCE dengan env Chromium/audio yang benar
+├── Dockerfile          # Debian 12 + Chromium + xrdp + xvfb/x11vnc/noVNC
+├── start.sh            # Entrypoint: kredensial, port, dbus, audio, RDP + web, watchdog
 ├── chromium.sh         # Launcher Chromium (flag container, WebGL, audio, cache)
-├── tune-ini.sh         # Tuning xrdp.ini & sesman.ini saat build
-├── pulse-default.pa    # Konfigurasi PulseAudio system-wide
-├── pulse-client.conf   # Client audio → socket /run/pulse/native
-├── docker-compose.yml  # Untuk tes lokal
-├── railway.json        # Konfigurasi deploy Railway
-└── README.md
+├── session.sh          # Isi sesi X: openbox + Chromium (browser-only)
+├── startwm.sh          # Hook sesi xrdp -> browser-session
+├── web.sh              # Xvfb + x11vnc + websockify (noVNC)
+├── novnc-index.html    # Halaman login noVNC (menggantikan index bawaan)
+├── openbox-rc.xml      # Window manager minimal: tanpa dekorasi, selalu maximize
+├── tune-ini.sh         # Tuning xrdp.ini & sesman.ini (TLS + speed)
+├── pulse-default.pa    # PulseAudio system-wide (suara browser)
+├── pulse-client.conf   # Client audio -> /run/pulse/native
+├── docker-compose.yml  # Tes lokal (port 3389 + 8080)
+├── railway.json
+└── preview/            # Bukti screenshot
 ```
-
----
-
-## 🚂 Deploy ke Railway
-
-**1️⃣ Upload ke GitHub**
-Upload semua file di folder ini ke repository baru.
-
-**2️⃣ Buat project di Railway**
-[railway.app](https://railway.app) → **New Project** → **Deploy from GitHub repo** → pilih repo.
-Railway mendeteksi `Dockerfile` sendiri (`railway.json` juga sudah disediakan).
-
-**3️⃣ Set password (jangan skip)**
-Tab **Variables** → tambah:
-
-```
-RDP_PASSWORD = passwordkuat123
-```
-
-**4️⃣ Tambah TCP Proxy**
-Service → **Settings** → **Networking** → **TCP Proxy** → **Add** → target port **`3389`**.
-
-Railway memberi alamat seperti `something.proxy.rlwy.net:12345`. **Port `12345` inilah yang dipakai**, bukan `3389`.
-
----
-
-## 🔌 Cara Connect
-
-### 🪟 Windows
-`Win + R` → `mstsc` → Computer: `something.proxy.rlwy.net:12345` → Connect → user `root` + password kamu.
-Kalau muncul peringatan sertifikat, pilih **Yes / Continue**.
-
-### 🤖 Android
-Install **Microsoft Remote Desktop (RD Client)** → **Add PC** → host `something.proxy.rlwy.net`, port `12345` → user `root`.
-
-### 🍎 Mac / 🐧 Linux
-- Mac: **Windows App / Microsoft Remote Desktop**
-- Linux: `xfreerdp /v:something.proxy.rlwy.net:12345 /u:root /p:password /dynamic-resolution +clipboard`
-
-Di layar login xrdp pilih **Session: `Xorg`** (bukan Xvnc) supaya resize & Chromium stabil.
-
----
-
-## 🏎️ Tips biar makin ngebut
-
-- Client RDP → **Experience** → *Low-speed broadband* / *Modem*
-- Aktifkan **Dynamic resolution / resize** di client
-- Matikan wallpaper (`xfdesktop`) kalau koneksi lambat
-- Naikkan RAM service di Railway — Chromium butuh ±700 MB untuk 5–8 tab
-- Mau lebih tajam? `max_bpp=24` sudah default; turunkan ke `16` di `tune-ini.sh` untuk koneksi jelek
 
 ---
 
@@ -178,16 +127,28 @@ Di layar login xrdp pilih **Session: `Xorg`** (bukan Xvnc) supaya resize & Chrom
 
 ```bash
 docker compose up --build -d
-# lalu connect ke localhost:3389  (root / root)
 ```
+
+- Web:  <http://localhost:8080>  (password default `root`)
+- RDP:  `localhost:3389`        (user `root`, password `root`)
 
 Atau manual:
 
 ```bash
-docker build -t xrdp-chromium .
-docker run -d -p 3389:3389 -e RDP_PASSWORD=rahasia --shm-size=1g \
-  -v rdp-data:/data --name rdp xrdp-chromium
+docker build -t chromium-only .
+docker run -d --shm-size=1g -p 8080:8080 -p 3389:3389 \
+  -e BROWSER_PASSWORD=rahasia -v browser-data:/data chromium-only
 ```
+
+---
+
+## 💡 Tips
+
+- **Volume Railway → `/data`**: profil Chromium (login, bookmark, cookie) + folder Downloads ikut tersimpan, tidak hilang saat redeploy.
+- Mode web/noVNC mengirim gambar layar (bukan video terkompresi seperti RDP) → **lebih berat**. Kalau koneksi bagus, RDP tetap paling mulus. Turunkan `SCREEN` (mis. `1280x720x24`) untuk menghemat bandwidth.
+- noVNC disarankan lewat **domain HTTPS Railway**, jangan port HTTP polos.
+- RAM: minimal **1 GB**, nyaman **2 GB** untuk belasan tab.
+- Butuh install extension dari Chrome Web Store? Chromium Debian tidak punya API key Google, jadi pakai **Load unpacked** (`chrome://extensions` → Developer mode) atau tambahkan `webext-*` dari apt seperti uBlock Origin yang sudah terpasang.
 
 ---
 
@@ -195,22 +156,31 @@ docker run -d -p 3389:3389 -e RDP_PASSWORD=rahasia --shm-size=1g \
 
 | Masalah | Solusi |
 |---|---|
-| `apt` 404 / build gagal | Jangan pakai `debian:bullseye`. Versi ini sudah di `bookworm` |
-| RDP tidak connect | TCP Proxy port `3389` sudah dibuat? Port di client harus port proxy Railway |
-| "Protocol error" / disconnect | Pakai client terbaru, pilih session **Xorg**, aktifkan TLS otomatis |
-| Layar hitam | Disconnect lalu login ulang, session **Xorg**; cek log: `tail -f /var/log/xrdp-sesman.log` |
-| Chromium tidak mau buka | Jalankan `chromium` di terminal XFCE untuk lihat error; pastikan `RDP_PASSWORD` benar |
-| Tab crash / "Aw, Snap" | Tambah RAM di Railway (min. 1 GB) atau set `CHROMIUM_CACHE_SIZE=268435456` |
-| WebGL/diagram 3D blank | Sudah di-handle SwiftShader; pastikan tidak menambah flag `--disable-gpu-compositing` sendiri |
-| Tidak ada suara | Client RDP → **Local Resources → Remote audio → Play on this computer** |
-| Copy-paste tidak jalan | Aktifkan clipboard di client; `allow_channels=true` sudah default |
-| Download hilang setelah restart | Mount Railway Volume ke `/data` (profil Chromium & Downloads otomatis dipindah ke sana) |
+| Halaman web kosong / "connection refused" | Pastikan **Generate Domain** mengarah ke port `HTTP_PORT` (8080) |
+| Login web gagal | Password = `BROWSER_PASSWORD`; kalau tidak diisi, jatuh ke `RDP_PASSWORD` (default `root`) |
+| Layar web lambat/patah | Turunkan `SCREEN` ke `1280x720x24`, atau pakai mode RDP |
+| RDP tidak connect | TCP Proxy port `3389` sudah dibuat? Port di client = port proxy Railway |
+| "Protocol error" di klien RDP | Pakai klien terbaru; pilih session **Xorg** kalau diminta |
+| Chromium tidak muncul di sesi RDP | Cek `/var/log/xrdp-sesman.log` dan `~/.xsession` berisi `browser-session` |
+| Tab crash "Aw, Snap" | Tambah RAM / `--shm-size=1g` (compose sudah) |
+| WebGL blank | Sudah otomatis SwiftShader; jangan tambah `--disable-gpu-compositing` |
+| Tidak ada suara | RDP: aktifkan *Remote audio → Play on this computer*. Web/noVNC: **audio tidak didukung** oleh VNC |
+| Download hilang setelah redeploy | Mount volume ke `/data` |
 
-Log penting:
+Log:
 
 ```bash
-tail -f /var/log/xrdp.log /var/log/xrdp-sesman.log
+tail -f /var/log/web.log /var/log/xrdp.log /var/log/xrdp-sesman.log
 ```
+
+---
+
+## ⚠️ Batasan yang perlu diketahui
+
+- **DRM Widevine** (Netflix/Spotify premium) tidak ada di Chromium Debian → pakai layanan non-DRM.
+- **WebGL** jalan lewat software rendering (Railway tanpa GPU) — cukup untuk Maps/Figma ringan, bukan untuk game 3D berat.
+- **Audio hanya di mode RDP**; noVNC tidak meneruskan suara.
+- **Kamera/mikrofon** tidak tersedia (container tanpa `/dev/video0`); bisa dipalsukan dengan `--use-fake-device-for-media-stream`.
 
 ---
 
@@ -222,9 +192,6 @@ tail -f /var/log/xrdp.log /var/log/xrdp-sesman.log
 
 [![Telegram](https://img.shields.io/badge/Contact-@SHADOW__HEX__REAL-26A5E4?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/SHADOW_HEX_REAL)
 [![Channel](https://img.shields.io/badge/Join-Shadow_Hex_Official-26A5E4?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/Shadow_Hex_Official)
-
-📩 **Telegram:** [@SHADOW_HEX_REAL](https://t.me/SHADOW_HEX_REAL)
-📢 **Channel:** [t.me/Shadow_Hex_Official](https://t.me/Shadow_Hex_Official)
 
 *Project ini berguna? Join channel & share* ⭐
 

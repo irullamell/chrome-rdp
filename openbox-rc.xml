@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Minimal openbox config for a browser-only session:
+     no decorations, no desktop clutter, Chromium always maximized + focused. -->
+<openbox_config xmlns="http://openbox.org/3.4/rc" version="3.4.3.1">
+  <theme>
+    <name>Clearlooks</name>
+    <titleLayout></titleLayout>
+    <keepBorder>no</keepBorder>
+    <animateIconify>no</animateIconify>
+    <font place="ActiveWindow"><name>sans</name><size>8</size><weight>bold</weight><slant>normal</slant></font>
+    <font place="InactiveWindow"><name>sans</name><size>8</size></font>
+    <font place="MenuHeader"><name>sans</name><size>9</size></font>
+    <font place="MenuItem"><name>sans</name><size>9</size></font>
+    <font place="OnScreenDisplay"><name>sans</name><size>8</size></font>
+  </theme>
+
+  <desktops>
+    <number>1</number>
+    <firstdesk>1</firstdesk>
+    <names><name>browser</name></names>
+    <popupTime>0</popupTime>
+  </desktops>
+
+  <resize>
+    <drawContents>no</drawContents>
+    <popupShow>Never</popupShow>
+  </resize>
+
+  <focus>
+    <followMouse>no</followMouse>
+    <focusNew>yes</focusNew>
+    <raiseOnFocus>yes</raiseOnFocus>
+  </focus>
+
+  <placement>
+    <policy>UnderMouse</policy>
+    <center>yes</center>
+  </placement>
+
+  <applications>
+    <application class="*">
+      <decor>no</decor>
+      <maximized>yes</maximized>
+      <position force="yes"><x>center</x><y>center</y></position>
+      <focus>yes</focus>
+    </application>
+    <application class="Chromium">
+      <decor>no</decor>
+      <maximized>yes</maximized>
+      <layer>above</layer>
+      <focus>yes</focus>
+    </application>
+    <application class="chromium">
+      <decor>no</decor>
+      <maximized>yes</maximized>
+      <layer>above</layer>
+      <focus>yes</focus>
+    </application>
+  </applications>
+
+  <keyboard>
+    <!-- Ctrl+Shift+W still closes a window; F5/Ctrl+R reload are handled by Chromium -->
+    <keybind key="A-F4"><action name="Close"/></keybind>
+    <keybind key="A-Tab"><action name="NextWindow"/></keybind>
+  </keyboard>
+
+  <mouse>
+    <dragThreshold>8</dragThreshold>
+    <doubleClickTime>200</doubleClickTime>
+  </mouse>
+</openbox_config>

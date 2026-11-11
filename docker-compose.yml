@@ -1,23 +1,28 @@
 services:
-  rdp:
+  browser:
     build:
       context: .
-      args:
-        ENABLE_WINE: "1"
-    image: railway-fast-rdp:chromium
-    container_name: rdp-chromium
+    image: railway-chromium-browser
+    container_name: chromium-browser
     ports:
-      - "3389:3389"
+      - "3389:3389"   # RDP
+      - "8080:8080"   # Web / noVNC
     environment:
-      RDP_USER: root
+      BROWSER_PASSWORD: root
       RDP_PASSWORD: root
+      RDP_USER: root
+      HTTP_PORT: "8080"
       RDP_PORT: "3389"
-    # Chromium + XFCE senang kalau /dev/shm tidak 64 MB
+      SCREEN: 1600x900x24
+      ENABLE_RDP: "1"
+      ENABLE_WEB: "1"
+      # START_URL: https://www.google.com
+    # Chromium butuh /dev/shm yang lega
     shm_size: 1gb
     volumes:
-      - rdp-data:/data
+      - browser-data:/data
     restart: unless-stopped
     stop_grace_period: 10s
 
 volumes:
-  rdp-data:
+  browser-data:
