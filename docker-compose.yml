@@ -5,7 +5,7 @@ services:
       args:
         WITH_WEB: "1"
         WITH_CJK_FONTS: "1"
-        WITH_UBLOCK: "1"
+        SAVE_BANDWIDTH: "1"
         RDP_MAX_BPP: "24"
         RDP_PAM: "0"      # "1" = kembali ke mode login password
     image: railway-chromium-browser
@@ -31,6 +31,8 @@ services:
       MALLOC_ARENA_MAX: "2"
       DEBUG: "0"
       # START_URL: https://www.google.com
+      AUTO_REFRESH_SECONDS: "0"    # reload otomatis tiap N detik (0 = mati)
+      # EXTRA_EXT_DIRS: /path/ke/extension/lain
     # Chromium butuh /dev/shm yang lega
     shm_size: 1gb
     volumes:

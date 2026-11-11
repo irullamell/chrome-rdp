@@ -10,12 +10,12 @@ LABEL org.opencontainers.image.title="Railway Chromium Browser" \
 # Build switches (all optional, defaults = full browser)
 #   --build-arg WITH_WEB=0        RDP saja   (-8 MB, tanpa Xvfb/x11vnc/noVNC)
 #   --build-arg WITH_CJK_FONTS=0  tanpa font CJK (-80 MB)
-#   --build-arg WITH_UBLOCK=0     tanpa uBlock Origin
+#   --build-arg SAVE_BANDWIDTH=0  tanpa pemangkas bandwidth (Data Saver)
 #   --build-arg RDP_MAX_BPP=16    16-bit colour (paling ringan di jaringan jelek)
 # ---------------------------------------------------------------------------
 ARG WITH_WEB=1
 ARG WITH_CJK_FONTS=1
-ARG WITH_UBLOCK=1
+ARG SAVE_BANDWIDTH=1
 ARG RDP_MAX_BPP=24
 # Passwordless: sesi xrdp tidak lewat PAM sama sekali.
 # Set --build-arg RDP_PAM=1 kalau ingin login pakai password (mode lama).
@@ -63,13 +63,12 @@ RUN set -eux; \
     if [ "$WITH_WEB" = "1" ]; then \
         WEB_PKGS="xvfb x11vnc novnc websockify x11-utils"; \
     fi; \
-    UBLOCK_PKGS=""; \
-    if [ "$WITH_UBLOCK" = "1" ]; then UBLOCK_PKGS="webext-ublock-origin-chromium"; fi; \
+
     apt-get update; \
     apt-get install -y --no-install-recommends \
-        ca-certificates openssl curl procps ssl-cert \
+        ca-certificates openssl curl procps ssl-cert python3 \
         openbox xdotool dbus dbus-x11 \
-        chromium chromium-common $UBLOCK_PKGS \
+        chromium chromium-common \
         libgl1-mesa-dri libglx-mesa0 libegl1 libgles2 libgbm1 \
         fonts-liberation fonts-dejavu-core fonts-noto-color-emoji \
         pulseaudio pulseaudio-utils \
@@ -123,6 +122,17 @@ RUN printf '%s\n' \
     '}' \
     > /etc/chromium/policies/managed/browser-defaults.json
 
+# Pemangkas bandwidth: policy Data Saver (hemat kuota, kualitas gambar turun
+# sedikit). Matikan dengan --build-arg SAVE_BANDWIDTH=0.
+RUN if [ "$SAVE_BANDWIDTH" = "1" ]; then \
+      printf '%s\n' \
+        '{' \
+        '  "DataSaverEnabled": true,' \
+        '  "EnableMediaRouter": false' \
+        '}' \
+        > /etc/chromium/policies/managed/bandwidth.json; \
+    fi
+
 # ---------------------------------------------------------------------------
 # Sesi browser-only
 # ---------------------------------------------------------------------------
@@ -139,6 +149,19 @@ RUN set -eux; \
     mkdir -p /home/chromium/.config /home/chromium/Downloads; \
     echo "browser-session" > /home/chromium/.xsession; chmod 700 /home/chromium/.xsession; \
     chown -R chromium:chromium /home/chromium
+
+# ---------------------------------------------------------------------------
+# Extension Auto Refresh (native, tanpa Chrome Web Store)
+# Chromium >= 137 mengabaikan --load-extension, jadi dipasang saat runtime
+# lewat CDP: Extensions.loadUnpacked (lihat /usr/local/bin/ext-init.py).
+# ---------------------------------------------------------------------------
+COPY extension/ /opt/auto-refresh/
+COPY ext-init.py /usr/local/bin/ext-init.py
+RUN set -eux; \
+    chmod +x /usr/local/bin/ext-init.py; \
+    chmod -R a+rX /opt/auto-refresh; \
+    python3 -c "import json;json.load(open('/opt/auto-refresh/manifest.json'))"; \
+    ls /opt/auto-refresh
 
 # ---------------------------------------------------------------------------
 # xrdp: TLS + tuning cepat, sertifikat self-signed sekali bikin

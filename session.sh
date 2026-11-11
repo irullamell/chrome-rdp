@@ -39,9 +39,44 @@ xsetroot -solid "#1e1e2e" 2>/dev/null || true
 # window manager: tanpa dekorasi, selalu maximize
 openbox --config-file /root/.config/openbox/rc.xml >/dev/null 2>&1 &
 
-# Chromium: kalau ditutup, buka lagi (RDP user tidak boleh lihat layar kosong)
+# Chromium dengan DevTools lokal (untuk memasang extension Auto Refresh).
+# Port hanya 127.0.0.1 dan tidak pernah diekspos keluar container.
+EXT_DIR="${EXT_DIR:-/opt/auto-refresh}"
+AUTO_REFRESH_SECONDS="${AUTO_REFRESH_SECONDS:-0}"
+DEBUG_PORT="${CHROMIUM_DEBUG_PORT:-9222}"
+
+run_chromium() {
+    local cdp=""
+    if [ -d "$EXT_DIR" ]; then
+        cdp="--enable-unsafe-extension-debugging --remote-debugging-port=${DEBUG_PORT}"
+    fi
+    # shellcheck disable=SC2086
+    /usr/bin/chromium $cdp
+}
+
+# pasang extension sekali per boot (Chromium >= 137 mengabaikan --load-extension)
+install_extension() {
+    command -v python3 >/dev/null 2>&1 || return 0
+    # Auto Refresh (MV3)
+    if [ -d "$EXT_DIR" ]; then
+        /usr/local/bin/ext-init.py --port "$DEBUG_PORT" --ext-dir "$EXT_DIR" \
+            --seconds "$AUTO_REFRESH_SECONDS" >&2 || true
+    fi
+    # Extension tambahan (opsional). Contoh: uBlock Origin dari Debian
+    #   EXTRA_EXT_DIRS="/usr/share/chromium/extensions/ublock-origin"
+    for d in ${EXTRA_EXT_DIRS:-}; do
+        [ -d "$d" ] || continue
+        /usr/local/bin/ext-init.py --port "$DEBUG_PORT" --ext-dir "$d" \
+            --seconds 0 >&2 || true
+    done
+}
+
 while :; do
-    /usr/bin/chromium
+    run_chromium &
+    CHROME_PID=$!
+    ( sleep 3; install_extension ) &
+
+    wait "$CHROME_PID"
     xset q >/dev/null 2>&1 || exit 0    # X sudah mati -> keluar, jangan loop
     sleep 1
 done

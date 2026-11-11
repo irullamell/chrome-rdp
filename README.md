@@ -73,6 +73,53 @@ GET /websockify?token=rahasia123 -> HTTP/1.1 101 Switching Protocols
 
 ---
 
+## 🔁 Extension **Auto Refresh** (sudah termasuk)
+
+Image ini membawa extension Auto Refresh sendiri (MV3, dibuat khusus, tanpa Chrome Web Store):
+`extension/` → dipasang di `/opt/auto-refresh`.
+
+### Cara pakai
+1. **Dari env** (berlaku untuk semua tab, paling praktis):
+   ```
+   AUTO_REFRESH_SECONDS=300      # reload tiap 5 menit; 0 = mati
+   ```
+2. **Dari ikon di toolbar** (Chromium → puzzle/ikon **Auto Refresh**):
+   - *Tab ini* — interval khusus untuk tab yang sedang aktif (0 = mati)
+   - *Semua tab* — interval global
+   - **Pause / Resume** dan **Reload now**
+
+Minimal 5 detik. Kalau `AUTO_REFRESH_SECONDS` diisi, pengaturan global dikunci
+(`enforce`) supaya tidak bisa diubah dari UI.
+
+### Kenapa perlu mekanisme khusus
+Chromium ≥ 137 **mengabaikan `--load-extension`** (dihapus upstream). Jadi extension dipasang saat runtime lewat DevTools Protocol:
+
+```
+chromium --enable-unsafe-extension-debugging --remote-debugging-port=9222  (127.0.0.1 saja)
+   → ext-init.py memanggil CDP "Extensions.loadUnpacked" + set interval dari env
+```
+
+Bukti uji (Chromium 156, halaman uji menghitung reload di `document.title`):
+
+```
+[ext] Auto Refresh terpasang (id dfojjogkdgignpamaedgehdliagbmcbn)
+[ext] auto refresh global = 5s
+  t=6s  title=hit-2
+  t=12s title=hit-3
+  t=18s title=hit-4        # reload berjalan otomatis, tanpa interaksi
+```
+
+> Catatan: `webext-ublock-origin-chromium` dari Debian masih **Manifest V2** dan
+> ditolak Chromium 156 ("unsupported manifest version"), jadi tidak dipakai lagi.
+> Sebagai gantinya ada **Data Saver** (policy bawaan) untuk menghemat kuota —
+> matikan dengan `--build-arg SAVE_BANDWIDTH=0`.
+
+### Mau reload per-URL tertentu saja?
+Pakai interval global kecil + satu tab; atau tambahkan logika sendiri di
+`extension/service-worker.js` (fungsi `tick()` punya daftar tab + URL).
+
+---
+
 ## 🩹 Kalau muncul **"Aw, Snap!"**
 
 "Aw, Snap" = proses renderer Chromium dibunuh. Di container ada 4 penyebab, dan versi ini sudah menangani keempatnya secara otomatis:
@@ -131,7 +178,7 @@ Kalau masih muncul (biasanya karena RAM plan Railway sangat kecil):
 | Font CJK dipangkas: hanya `NotoSansCJK-Regular/Bold` | **−50 s/d −80 MB** (paket asli 91 MB) |
 | `fonts-freefont-ttf` dihapus (sudah tercakup Liberation + DejaVu) | **−6,6 MB** |
 | Chromium + chromium-common satu kali `apt` (tak dobel unduh 60 MB+) | layer lebih kecil |
-| Build-arg: `WITH_WEB=0`, `WITH_CJK_FONTS=0`, `WITH_UBLOCK=0` | −8 / −80 / −2 MB |
+| Build-arg: `WITH_WEB=0`, `WITH_CJK_FONTS=0`, `SAVE_BANDWIDTH=0` | −8 / −80 MB |
 
 ### 2. RAM & CPU lebih hemat
 | Tindakan | Efek |
@@ -186,9 +233,12 @@ Kalau masih muncul (biasanya karena RAM plan Railway sangat kecil):
 | `SHM_MIN_MB` | `512` | Ambang minimum `/dev/shm`; di bawah ini start.sh mencoba mount tmpfs |
 | `VNC_SPEED` | `lan` | Preset x11vnc: `lan`/`fast`/`medium`/`slow` |
 | `VNC_POLL` | `40` | ms; naikkan untuk CPU lebih hemat |
+| `AUTO_REFRESH_SECONDS` | `0` | Reload otomatis semua tab tiap N detik (0 = mati) |
+| `EXTRA_EXT_DIRS` | – | Folder extension tambahan yang ikut dimuat (dipisah spasi) |
+| `CHROMIUM_DEBUG_PORT` | `9222` | Port DevTools lokal (127.0.0.1) untuk pemasangan extension |
 | `DEBUG` | `0` | `1` = tampilkan log di stdout |
 
-Build args: `WITH_WEB`, `WITH_CJK_FONTS`, `WITH_UBLOCK`, `RDP_MAX_BPP`, dan **`RDP_PAM=1`** (kembali ke mode password/PAM).
+Build args: `WITH_WEB`, `WITH_CJK_FONTS`, `SAVE_BANDWIDTH`, `RDP_MAX_BPP`, dan **`RDP_PAM=1`** (kembali ke mode password/PAM).
 
 ---
 
@@ -286,6 +336,9 @@ Di Railway: **Settings → Build → Build Args**.
 | Chromium tidak muncul | `tail /var/log/xrdp-sesman.log`; pastikan `~/.xsession` berisi `browser-session` |
 | Tab crash "Aw, Snap" | Lihat bagian **🩹 Kalau muncul "Aw, Snap!"** di atas — biasanya RAM plan terlalu kecil |
 | Download hilang saat redeploy | Mount volume ke `/data` |
+| Auto Refresh tidak muncul | `AUTO_REFRESH_SECONDS` hanya mengisi interval — ikon extension ada di toolbar Chromium. Cek log `[ext] Auto Refresh terpasang`; kalau ada `[ext] CDP error`, pastikan `python3` ada di image |
+| Interval tidak berubah | Tab yang sudah terbuka perlu reload manual sekali (atau tutup/buka tab) setelah nilai env diubah |
+| Extension hilang setelah restart | Normal: dipasang ulang otomatis 3 detik setelah Chromium start di setiap sesi |
 
 Log: `DEBUG=1` lalu lihat stdout Railway, atau `docker exec -it <c> tail -f /var/log/web.log /var/log/xrdp-sesman.log`.
 
@@ -316,6 +369,8 @@ Railway-Fast-Rdp/
 ├── tune-ini.sh         # Tuning xrdp.ini & sesman.ini (TLS + speed)
 ├── pulse-default.pa    # PulseAudio system-wide (suara browser)
 ├── pulse-client.conf   # Client audio -> /run/pulse/native
+├── extension/          # Auto Refresh (MV3): service-worker, popup, ikon
+├── ext-init.py         # Pemasang extension via CDP (Chromium >= 137)
 ├── docker-compose.yml
 ├── railway.json
 └── preview/            # Bukti screenshot

@@ -77,6 +77,16 @@ if [ -f "$SESMAN_INI" ]; then
     done
 fi
 
+# ---- Auto Refresh: policy managed (fallback) + env untuk extension ---------
+export AUTO_REFRESH_SECONDS="${AUTO_REFRESH_SECONDS:-0}"
+export EXT_DIR="${EXT_DIR:-/opt/auto-refresh}"
+if [ -d /etc/chromium/policies/managed ]; then
+    printf '{\n  "AutoRefreshSettings": { "seconds": %s, "enforce": %s }\n}\n' \
+        "${AUTO_REFRESH_SECONDS:-0}" \
+        "$([ "${AUTO_REFRESH_SECONDS:-0}" -gt 0 ] 2>/dev/null && echo true || echo false)" \
+        > /etc/chromium/policies/managed/auto-refresh.json
+fi
+
 # ---- proxy autentikasi opsional (dipakai startwm.sh) -----------------------
 rm -f /etc/xrdp/authproxy.conf
 if [ -n "$AUTH_PROXY" ]; then
