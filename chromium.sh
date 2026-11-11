@@ -1,12 +1,9 @@
 #!/bin/bash
 # ---------------------------------------------------------------------------
-# Chromium launcher for this container. This image is browser-only: every
-# flag here exists so that Chromium behaves like a normal browser on a remote
-# desktop (WebGL, audio, downloads, clipboard, passwords) and nothing else.
+# Chromium launcher — dioptimalkan untuk container kecil tanpa GPU.
 #
-# Override without editing this file:
-#   CHROMIUM_FLAGS="--incognito --lang=id"     chromium
-#   START_URL="https://youtube.com"            (first tab)
+# Prinsip: satu profil, cache kecil, background work dimatikan, WebGL lewat
+# SwiftShader, dan semua tuning bisa diubah lewat env TANPA edit file.
 # ---------------------------------------------------------------------------
 set -u
 
@@ -28,25 +25,39 @@ RUN_AS_ROOT=0
 FLAGS=(
     # --- container basics ---------------------------------------------------
     --test-type
-    --disable-dev-shm-usage                 # /dev/shm is tiny inside containers
-    --password-store=basic                  # no gnome-keyring in this image
+    --disable-dev-shm-usage                 # /dev/shm container cuma 64 MB
+    --password-store=basic                  # tanpa gnome-keyring
     --no-first-run
     --no-default-browser-check
     --disable-breakpad
     --disable-crash-reporter
     --disk-cache-dir="$CACHE_DIR"
-    --disk-cache-size="${CHROMIUM_CACHE_SIZE:-536870912}"
-    --media-cache-size=134217728
+    --disk-cache-size="${CHROMIUM_CACHE_SIZE:-268435456}"   # 256 MB (hemat disk & RAM)
+    --media-cache-size="${CHROMIUM_MEDIA_CACHE_SIZE:-67108864}"  # 64 MB
 
-    # --- rendering: WebGL / Canvas2D / CSS3 without a GPU -------------------
+    # --- rendering tanpa GPU -----------------------------------------------
     --use-gl=angle
     --use-angle=swiftshader
     --enable-unsafe-swiftshader
     --ignore-gpu-blocklist
     --enable-features=CanvasOopRasterization,ParallelDownloading
-    --disable-features=Translate,MediaRouter,OptimizationHints,CalculateNativeWinOcclusion
+    --disable-features=Translate,MediaRouter,OptimizationHints,CalculateNativeWinOcclusion,InterestFeedContentSuggestions
 
-    # --- browsing quality of life -------------------------------------------
+    # --- hemat CPU / latensi start (semua fitur ini tidak berguna di container)
+    --disable-background-networking
+    --disable-component-update
+    --disable-domain-reliability
+    --disable-client-side-phishing-detection
+    --disable-sync
+    --disable-default-apps
+    --disable-hang-monitor
+    --disable-prompt-on-repost
+    --no-pings
+    --no-service-autorun
+    --hide-crash-restore-bubble            # setelah container restart tidak ada popup "Restore pages?"
+    --disable-smooth-scrolling              # kurangi repaint saat scroll via RDP/VNC
+
+    # --- kualitas tampilan remote ------------------------------------------
     --ozone-platform=x11
     --force-color-profile=srgb
     --autoplay-policy=no-user-gesture-required
@@ -54,34 +65,37 @@ FLAGS=(
     --start-maximized
 )
 
-if [ "$RUN_AS_ROOT" = "1" ]; then
-    FLAGS+=(--no-sandbox)                   # no user namespaces for root
+# Batasi jumlah renderer process (RAM lebih kecil di container 1 vCPU)
+FLAGS+=("--renderer-process-limit=${CHROMIUM_RENDERER_LIMIT:-3}")
+
+# Mode RAM kecil: 1 proses per situs + low-end device mode
+if [ "${CHROMIUM_LOW_RAM:-0}" = "1" ]; then
+    FLAGS+=(--process-per-site --enable-low-end-device-mode --disable-gpu-program-cache)
 fi
 
-# Optional proxy: CHROMIUM_PROXY=http://host:port or socks5://host:port
-if [ -n "${CHROMIUM_PROXY:-}" ]; then
-    FLAGS+=("--proxy-server=${CHROMIUM_PROXY}")
-fi
+# Root butuh --no-sandbox (tidak ada user namespace untuk root)
+[ "$RUN_AS_ROOT" = "1" ] && FLAGS+=(--no-sandbox)
 
-# Optional language / UI locale
-if [ -n "${BROWSER_LANG:-}" ]; then
-    FLAGS+=("--lang=${BROWSER_LANG}")
-fi
+# Proxy opsional
+[ -n "${CHROMIUM_PROXY:-}" ] && FLAGS+=("--proxy-server=${CHROMIUM_PROXY}")
 
-# Optional extra flags
+# Bahasa UI opsional
+[ -n "${BROWSER_LANG:-}" ] && FLAGS+=("--lang=${BROWSER_LANG}")
+
+# Flag tambahan bebas
 if [ -n "${CHROMIUM_FLAGS:-}" ]; then
     # shellcheck disable=SC2206
     FLAGS+=(${CHROMIUM_FLAGS})
 fi
 
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+[ -d "$XDG_RUNTIME_DIR" ] || { XDG_RUNTIME_DIR="/tmp/runtime-$(id -u)"; export XDG_RUNTIME_DIR; }
 mkdir -p "$XDG_RUNTIME_DIR" 2>/dev/null && chmod 700 "$XDG_RUNTIME_DIR" 2>/dev/null
 
-# Audio: the container runs a system-wide PulseAudio daemon.
 export PULSE_SERVER="${PULSE_SERVER:-unix:/run/pulse/native}"
-
-# No GPU in the container: render with software GL.
 export LIBGL_ALWAYS_SOFTWARE="${LIBGL_ALWAYS_SOFTWARE:-1}"
+# glibc arena kecil => RSS lebih rendah di container
+export MALLOC_ARENA_MAX="${MALLOC_ARENA_MAX:-2}"
 
 if [ -n "$START_URL" ]; then
     exec "$CHROMIUM_BIN" "${FLAGS[@]}" "$START_URL" "$@"

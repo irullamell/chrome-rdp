@@ -2,6 +2,11 @@ services:
   browser:
     build:
       context: .
+      args:
+        WITH_WEB: "1"
+        WITH_CJK_FONTS: "1"
+        WITH_UBLOCK: "1"
+        RDP_MAX_BPP: "24"
     image: railway-chromium-browser
     container_name: chromium-browser
     ports:
@@ -16,6 +21,14 @@ services:
       SCREEN: 1600x900x24
       ENABLE_RDP: "1"
       ENABLE_WEB: "1"
+      # --- tuning (semua opsional) ---
+      CHROMIUM_RENDERER_LIMIT: "3"
+      CHROMIUM_CACHE_SIZE: "268435456"
+      CHROMIUM_LOW_RAM: "0"      # "1" untuk server 1 vCPU / RAM kecil
+      VNC_SPEED: lan             # lan | fast | medium | slow
+      VNC_POLL: "40"
+      MALLOC_ARENA_MAX: "2"
+      DEBUG: "0"
       # START_URL: https://www.google.com
     # Chromium butuh /dev/shm yang lega
     shm_size: 1gb

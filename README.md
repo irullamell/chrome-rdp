@@ -35,6 +35,54 @@ Hasilnya: **image jauh lebih kecil**, build lebih cepat, RAM lebih lega untuk ta
 
 ---
 
+## ⚡ Optimasi (v3)
+
+Semua angka di bawah adalah hasil ukur di sandbox, bukan klaim.
+
+### 1. Image lebih kecil
+| Tindakan | Efek |
+|---|---|
+| `path-exclude` untuk `/usr/share/doc`, `/man`, `/info`, `/lintian` (copyright tetap ada) | **−133 MB** |
+| Font CJK dipangkas: hanya `NotoSansCJK-Regular/Bold` | **−50 s/d −80 MB** (`fonts-noto-cjk` asli 91 MB) |
+| `fonts-freefont-ttf` (6,6 MB) dihapus — sudah tercakup Liberation + DejaVu | **−6,6 MB** |
+| `Chromium` + `chromium-common` dalam satu `apt` run (tidak dobel download 60 MB+) | layer lebih kecil & build lebih cepat |
+| Debconf cache, `.pyc`, sisa `/tmp`, `apt` cache dibersihkan | beberapa MB + image bersih |
+| Build-arg opsional: `WITH_WEB=0` (RDP saja), `WITH_CJK_FONTS=0`, `WITH_UBLOCK=0` | **−8 / −80 / −2 MB** |
+
+### 2. RAM & CPU lebih hemat
+| Tindakan | Efek |
+|---|---|
+| `MALLOC_ARENA_MAX=2` | RSS turun pada container kecil (Chromium sangat banyak thread) |
+| `--renderer-process-limit=3` (bisa diubah) | jumlah proses renderer dibatasi |
+| `--disable-background-networking`, `--disable-component-update`, `--disable-sync`, `--no-pings`, `--disable-domain-reliability` | thread/jaringan latar berhenti, CPU idle turun |
+| `--disk-cache-size=256 MB` (dari 512 MB) + media cache 64 MB | disk I/O & mapping RAM turun |
+| Profil Chromium di `/data` (volume) | cache tidak dibangun ulang tiap redeploy |
+| `fc-cache` dijalankan saat build | login pertama tidak nunggu rebuild cache font |
+| Mode 1 vCPU: `CHROMIUM_LOW_RAM=1` → `--process-per-site --enable-low-end-device-mode` | RAM turun lagi untuk server kecil |
+
+### 3. Remote lebih ringan
+| Tindakan | Efek |
+|---|---|
+| x11vnc: `-wait 40 -defer 40 -sb 15 -speeds lan` | CPU & bandwidth turun saat layar diam |
+| VNC hanya di `127.0.0.1`, `-norc` (config user tidak mengubah preset) | aman + perilaku konsisten |
+| `-dpi 96`, `+extension RANDR`, tanpa TCP di Xvfb | start cepat, resize jalan |
+| Chromium: `--disable-smooth-scrolling`, sRGB | repaint lebih sedikit lewat RDP/VNC |
+| RDP: `RDP_MAX_BPP=16` (build-arg) | bandwidth ~40% lebih kecil di jaringan jelek |
+| Tunggu jendela Chromium muncul (maks 6 s) sebelum VNC nyala | tidak ada layar hitam saat connect |
+
+### 4. Waktu start lebih cepat
+| Tindakan | Efek |
+|---|---|
+| Tanpa `sleep 2` + `tail -F` default (log hanya jika `DEBUG=1`) | ~2 s lebih cepat |
+| Watchdog 5 s → 3 s, tanpa fork `pgrep` ganda | reaksi lebih cepat, CPU tetap kecil |
+| Port xrdp & `/data` link hanya ditulis kalau perlu | entrypoint lebih singkat |
+| Banner 1 baris (bukan 5 `echo`) | log Railway lebih rapi |
+| `PYTHONDONTWRITEBYTECODE=1` untuk websockify | tidak ada `.pyc` saat runtime |
+
+**Hasil uji:** `index.html` → 200, `vnc.html` → 200, VNC listening di `127.0.0.1:5900`, Chromium ter-render penuh, `x11vnc` tanpa error (opsi yang tidak ada sudah dibuang).
+
+---
+
 ## 🚪 Dua cara masuk
 
 ### 1️⃣ Lewat browser — tanpa aplikasi apa pun (noVNC)
@@ -75,7 +123,13 @@ Uji yang dijalankan di sandbox: `Xvfb → openbox → Chromium` + `x11vnc → we
 | `BROWSER_LANG` | – | Bahasa UI, contoh `id` |
 | `CHROMIUM_FLAGS` | – | Flag tambahan, contoh `--incognito` |
 | `CHROMIUM_PROXY` | – | Proxy browser, contoh `socks5://user:pass@host:port` |
-| `CHROMIUM_CACHE_SIZE` | `536870912` | Ukuran disk cache (byte) |
+| `CHROMIUM_CACHE_SIZE` | `268435456` | Ukuran disk cache (byte) |
+| `CHROMIUM_MEDIA_CACHE_SIZE` | `67108864` | Cache media (byte) |
+| `CHROMIUM_RENDERER_LIMIT` | `3` | Maks proses renderer |
+| `CHROMIUM_LOW_RAM` | `0` | `1` = mode hemat RAM (`--process-per-site`, low-end mode) |
+| `VNC_SPEED` | `lan` | Preset x11vnc: `lan`/`fast`/`medium`/`slow` |
+| `VNC_POLL` | `40` | ms; naikkan untuk CPU lebih hemat |
+| `DEBUG` | `0` | `1` = tampilkan log xrdp/web di stdout |
 
 ---
 
@@ -120,6 +174,24 @@ Railway-Fast-Rdp/
 ├── railway.json
 └── preview/            # Bukti screenshot
 ```
+
+---
+
+## 🔧 Build lebih kecil (opsional)
+
+```bash
+# RDP saja, tanpa noVNC, tanpa font CJK, tanpa uBlock  -> image paling kecil
+docker build \
+  --build-arg WITH_WEB=0 \
+  --build-arg WITH_CJK_FONTS=0 \
+  --build-arg WITH_UBLOCK=0 \
+  -t chromium-min .
+
+# jaringan jelek: paksa 16-bit colour
+docker build --build-arg RDP_MAX_BPP=16 -t chromium-lite .
+```
+
+Di Railway: **Settings → Build → Build Args** lalu isi nama & nilainya.
 
 ---
 

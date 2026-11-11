@@ -49,7 +49,7 @@ set_kv "$XIN" certificate /etc/xrdp/cert.pem
 set_kv "$XIN" key_file /etc/xrdp/key.pem
 set_kv "$XIN" allow_channels true
 set_kv "$XIN" allow_multimon true
-set_kv "$XIN" max_bpp 24                      # 24-bit: correct colours, still fast
+set_kv "$XIN" max_bpp ${RDP_MAX_BPP:-24}      # 16 = paling ringan, 24 = warna akurat
 set_kv "$XIN" use_fastpath both
 set_kv "$XIN" bitmap_cache true
 set_kv "$XIN" bitmap_compression true
