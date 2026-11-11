@@ -1,109 +1,199 @@
-FROM debian:bullseye
+FROM debian:bookworm-slim
 
-ENV DEBIAN_FRONTEND=noninteractive
+LABEL org.opencontainers.image.title="Railway Fast RDP" \
+      org.opencontainers.image.description="Debian 12 + XFCE4 + Chromium (full support) remote desktop over RDP" \
+      org.opencontainers.image.source="https://github.com/shadowhexreal/Railway-Fast-Rdp" \
+      org.opencontainers.image.licenses="MIT"
 
-RUN dpkg --add-architecture i386
+ENV DEBIAN_FRONTEND=noninteractive \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
+    XDG_RUNTIME_DIR=/run/user/0 \
+    BROWSER=/usr/bin/chromium \
+    PULSE_SERVER=unix:/run/pulse/native
 
-# Debian 11 (bullseye) is end-of-life: its packages moved to archive.debian.org.
-# Without this, apt gives "404 Not Found" on debian-security.
-RUN printf '%s\n' \
-    'deb http://archive.debian.org/debian bullseye main' \
-    'deb http://archive.debian.org/debian-security bullseye-security main' \
-    > /etc/apt/sources.list && \
-    rm -f /etc/apt/sources.list.d/* && \
-    printf '%s\n' \
-    'Acquire::Check-Valid-Until "false";' \
-    'Acquire::Retries "5";' \
-    > /etc/apt/apt.conf.d/99archive
+# i386 is only needed for wine32 (Windows .exe). Set ENABLE_WINE=0 to skip it.
+ARG ENABLE_WINE=1
+RUN if [ "$ENABLE_WINE" = "1" ]; then dpkg --add-architecture i386; fi
 
-# --no-install-recommends + xfce4-goodies removed => much smaller image, faster build, faster desktop
-# Firefox removed, Google Chrome installed from official .deb
+# OCI image config so Railway (and "docker inspect") knows the port + entrypoint.
+ENV RDP_PORT=3389
+
+# Debian 12 (bookworm, LTS) => Chromium straight from Debian security,
+# no Google Chrome .deb, no archive.debian.org workaround.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     gnupg \
-    xrdp \
-    xorgxrdp \
-    xfce4 \
-    xfce4-terminal \
-    xorg \
-    xauth \
-    x11-xserver-utils \
-    libgl1-mesa-dri \
-    dbus-x11 \
-    procps \
-    sudo \
+    openssl \
     curl \
     wget \
     nano \
+    less \
+    procps \
+    sudo \
     net-tools \
-    policykit-1 \
+    ssl-cert \
+    xrdp \
+    xorgxrdp \
+    xorg \
+    xauth \
+    x11-xserver-utils \
+    x11-utils \
+    xdg-utils \
+    dbus \
+    dbus-x11 \
+    xfce4 \
+    xfce4-terminal \
+    mesa-utils \
+    libgl1-mesa-dri \
+    libglx-mesa0 \
+    libegl1 \
+    libgles2 \
+    libgbm1 \
+    libpulse0 \
     pulseaudio \
     pulseaudio-utils \
+    policykit-1 \
+    polkitd \
+    upower \
+    chromium \
+    chromium-common \
+    chromium-sandbox \
+    libnss3-tools \
+    libu2f-udev \
     fonts-liberation \
-    wine \
-    wine32 && \
-    wget -q -O /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb && \
-    apt-get install -y --no-install-recommends /tmp/chrome.deb && \
-    rm -f /tmp/chrome.deb && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
+    fonts-dejavu-core \
+    fonts-freefont-ttf \
+    fonts-noto-core \
+    fonts-noto-color-emoji \
+    fonts-noto-cjk \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* /var/cache/apt/*
 
-# Chrome as root inside a container: needs --no-sandbox, small /dev/shm fix, no GPU
-RUN mv /opt/google/chrome/google-chrome /opt/google/chrome/google-chrome-real && \
-    printf '%s\n' '#!/bin/bash' \
-    'exec /opt/google/chrome/google-chrome-real --no-sandbox --test-type --disable-dev-shm-usage --disable-gpu --disable-software-rasterizer --enable-low-end-device-mode --renderer-process-limit=4 --disable-smooth-scrolling --disable-features=Translate,MediaRouter --disk-cache-dir=/tmp/chrome-cache --disk-cache-size=104857600 --no-first-run --no-default-browser-check --password-store=basic "$@"' \
-    > /opt/google/chrome/google-chrome && \
-    chmod +x /opt/google/chrome/google-chrome && \
-    (update-alternatives --set x-www-browser /usr/bin/google-chrome-stable || true) && \
-    (update-alternatives --set gnome-www-browser /usr/bin/google-chrome-stable || true)
+# ---- Wine (optional, for Windows .exe) ------------------------------------
+RUN if [ "$ENABLE_WINE" = "1" ]; then \
+      apt-get update && \
+      apt-get install -y --no-install-recommends wine wine32 && \
+      apt-get clean && rm -rf /var/lib/apt/lists/* /var/cache/apt/* ; \
+    fi
 
-# Set root password
-RUN echo "root:root" | chpasswd
+# ---------------------------------------------------------------------------
+# Chromium launcher
+# The Debian package puts the real binary in /usr/lib/chromium/chromium and a
+# thin wrapper in /usr/bin/chromium. We keep the official wrapper as
+# /usr/bin/chromium.dist and put our container-aware launcher in front, so
+# desktop icon, terminal, xdg-open and "chromium" all behave the same.
+# ---------------------------------------------------------------------------
+COPY chromium.sh /usr/local/bin/chromium-rdp
+RUN chmod +x /usr/local/bin/chromium-rdp \
+    && if [ -f /usr/bin/chromium ] && [ ! -e /usr/bin/chromium.dist ]; then cp -a /usr/bin/chromium /usr/bin/chromium.dist; fi \
+    && ln -sf /usr/local/bin/chromium-rdp /usr/bin/chromium \
+    && update-alternatives --install /usr/bin/x-www-browser x-www-browser /usr/local/bin/chromium-rdp 200 \
+    && update-alternatives --install /usr/bin/gnome-www-browser gnome-www-browser /usr/local/bin/chromium-rdp 200 \
+    && sed -i 's|^Exec=.*|Exec=/usr/bin/chromium %U|' /usr/share/applications/chromium.desktop \
+    && mkdir -p /etc/chromium/policies/managed /tmp/chromium-cache
 
-RUN sed -i 's/^allowed_users=.*/allowed_users=anybody/' /etc/X11/Xwrapper.config || echo "allowed_users=anybody" >> /etc/X11/Xwrapper.config
+# Managed Chromium policies: sane defaults for a remote desktop (no telemetry,
+# no "make default browser" nag, downloads/printing/autofill enabled).
+RUN printf '%s\n' \
+    '{' \
+    '  "DefaultBrowserSettingEnabled": false,' \
+    '  "MetricsReportingEnabled": false,' \
+    '  "BackgroundModeEnabled": false,' \
+    '  "ShowHomeButton": true,' \
+    '  "HomepageLocation": "https://www.google.com",' \
+    '  "BookmarkBarEnabled": false,' \
+    '  "PasswordManagerEnabled": true,' \
+    '  "AutofillAddressEnabled": true,' \
+    '  "AutofillCreditCardEnabled": true,' \
+    '  "DownloadRestrictions": 0,' \
+    '  "PrintingEnabled": true,' \
+    '  "HardwareAccelerationModeEnabled": true' \
+    '}' \
+    > /etc/chromium/policies/managed/rdp-defaults.json
 
-RUN echo "startxfce4" > /root/.xsession && chmod 700 /root/.xsession
+# ---------------------------------------------------------------------------
+# xrdp: TLS + speed tuning
+# ---------------------------------------------------------------------------
+COPY tune-ini.sh /tmp/tune-ini.sh
+RUN chmod +x /tmp/tune-ini.sh && /tmp/tune-ini.sh && rm -f /tmp/tune-ini.sh
 
-# Generate machine-id for dbus
-RUN mkdir -p /var/run/dbus && dbus-uuidgen > /var/lib/dbus/machine-id
+# Self-signed TLS certificate for the RDP listener (valid 10 years, unique per
+# build). Clients show "unknown publisher" once; accept and it works over TLS.
+RUN set -eux; \
+    xrdp-keygen xrdp /etc/xrdp/rsakeys.ini >/dev/null 2>&1 || true; \
+    if [ ! -s /etc/xrdp/cert.pem ] || [ ! -s /etc/xrdp/key.pem ]; then \
+      umask 077; \
+      openssl req -x509 -nodes -newkey rsa:2048 -sha256 -days 3650 \
+        -subj "/C=ID/O=Railway-Fast-RDP/CN=railway-fast-rdp" \
+        -keyout /etc/xrdp/key.pem -out /etc/xrdp/cert.pem; \
+    fi; \
+    chmod 600 /etc/xrdp/key.pem; chmod 644 /etc/xrdp/cert.pem
 
-RUN sed -i 's/crypt_level=high/crypt_level=low/' /etc/xrdp/xrdp.ini && \
-    sed -i 's/security_layer=negotiate/security_layer=rdp/' /etc/xrdp/xrdp.ini && \
-    echo "exec startxfce4" > /etc/xrdp/startwm.sh && chmod +x /etc/xrdp/startwm.sh
+# ---------------------------------------------------------------------------
+# Session
+# ---------------------------------------------------------------------------
+COPY startwm.sh /etc/xrdp/startwm.sh
+RUN chmod 755 /etc/xrdp/startwm.sh && \
+    echo "startxfce4" > /root/.xsession && chmod 700 /root/.xsession
 
-# Fast RDP: compression, fastpath, nodelay, balanced buffers, 16-bit colour
-RUN for kv in "max_bpp=16" "use_fastpath=both" "bitmap_cache=true" "bitmap_compression=true" "bulk_compression=true" "tcp_nodelay=true" "tcp_keepalive=true" "tcp_send_buffer_bytes=1048576" "tcp_recv_buffer_bytes=2097152"; do \
-      k="${kv%%=*}"; \
-      if grep -qE "^[#; ]*${k}=" /etc/xrdp/xrdp.ini; then \
-        sed -i -E "0,/^[#; ]*${k}=.*/s//${kv}/" /etc/xrdp/xrdp.ini; \
-      else \
-        sed -i "0,/^\[Globals\]/s//[Globals]\n${kv}/" /etc/xrdp/xrdp.ini; \
-      fi; \
-    done
+# Audio: system-wide PulseAudio on /run/pulse/native (RDP audio + Chromium)
+COPY pulse-client.conf /etc/pulse/client.conf
+COPY pulse-default.pa /etc/pulse/default.pa
+RUN adduser xrdp ssl-cert 2>/dev/null || true; \
+    for g in pulse-access pulse; do getent group "$g" >/dev/null || addgroup --system "$g"; done; \
+    adduser xrdp pulse-access 2>/dev/null || true; \
+    adduser xrdp pulse 2>/dev/null || true; \
+    adduser root pulse-access 2>/dev/null || true; \
+    printf 'root\trw\nxrdp\trw\n' > /etc/pulse/access.conf; \
+    mkdir -p /run/pulse /var/run/pulse && chmod 755 /run/pulse /var/run/pulse
 
-# Stable sessions: never kill disconnected sessions, no idle/disconnect timeouts
-RUN for kv in "KillDisconnected=false" "DisconnectedTimeLimit=0" "IdleTimeLimit=0"; do \
-      k="${kv%%=*}"; \
-      if grep -qE "^[#; ]*${k}=" /etc/xrdp/sesman.ini; then \
-        sed -i -E "0,/^[#; ]*${k}=.*/s//${kv}/" /etc/xrdp/sesman.ini; \
-      fi; \
-    done
-
-# Fast desktop: turn off XFCE window compositor (big CPU saver over RDP)
+# XFCE defaults: compositor off (CPU saver over RDP), 96 dpi, emoji-capable fonts
 RUN mkdir -p /etc/xdg/xfce4/xfconf/xfce-perchannel-xml && \
     printf '%s\n' \
     '<?xml version="1.0" encoding="UTF-8"?>' \
     '<channel name="xfwm4" version="1.0">' \
     '  <property name="general" type="empty">' \
     '    <property name="use_compositing" type="bool" value="false"/>' \
+    '    <property name="box_move" type="bool" value="true"/>' \
+    '    <property name="box_resize" type="bool" value="true"/>' \
     '  </property>' \
     '</channel>' \
-    > /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml
+    > /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml && \
+    printf '%s\n' \
+    '<?xml version="1.0" encoding="UTF-8"?>' \
+    '<channel name="xsettings" version="1.0">' \
+    '  <property name="Net" type="empty">' \
+    '    <property name="ThemeName" type="string" value="Adwaita"/>' \
+    '    <property name="IconThemeName" type="string" value="Adwaita"/>' \
+    '  </property>' \
+    '  <property name="Xft" type="empty">' \
+    '    <property name="DPI" type="int" value="96"/>' \
+    '    <property name="Antialias" type="int" value="1"/>' \
+    '    <property name="HintStyle" type="string" value="hintslight"/>' \
+    '    <property name="RGBA" type="string" value="none"/>' \
+    '  </property>' \
+    '  <property name="Keyboard" type="empty">' \
+    '    <property name="RepeatDelay" type="int" value="400"/>' \
+    '    <property name="RepeatInterval" type="int" value="30"/>' \
+    '  </property>' \
+    '</channel>' \
+    > /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml && \
+    mkdir -p /root/Desktop && \
+    cp /usr/share/applications/chromium.desktop /root/Desktop/chromium.desktop && \
+    chmod +x /root/Desktop/chromium.desktop && \
+    sed -i 's|^Name=.*|Name=Chromium Browser|' /root/Desktop/chromium.desktop
 
-RUN adduser xrdp ssl-cert
+# dbus machine-id + runtime dirs
+RUN mkdir -p /var/run/dbus /run/xrdp /run/user/0 && dbus-uuidgen > /var/lib/dbus/machine-id
 
 COPY start.sh /start.sh
 RUN chmod +x /start.sh
 
 EXPOSE 3389
+STOPSIGNAL SIGTERM
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=25s --retries=3 \
+    CMD bash -c 'exec 3<>/dev/tcp/127.0.0.1/3389' || exit 1
 
 CMD ["/start.sh"]

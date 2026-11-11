@@ -1,0 +1,23 @@
+services:
+  rdp:
+    build:
+      context: .
+      args:
+        ENABLE_WINE: "1"
+    image: railway-fast-rdp:chromium
+    container_name: rdp-chromium
+    ports:
+      - "3389:3389"
+    environment:
+      RDP_USER: root
+      RDP_PASSWORD: root
+      RDP_PORT: "3389"
+    # Chromium + XFCE senang kalau /dev/shm tidak 64 MB
+    shm_size: 1gb
+    volumes:
+      - rdp-data:/data
+    restart: unless-stopped
+    stop_grace_period: 10s
+
+volumes:
+  rdp-data:

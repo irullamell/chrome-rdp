@@ -1,0 +1,31 @@
+#!/usr/bin/pulseaudio -nF
+#
+# System-wide PulseAudio for a container. xrdp-chansrv (MS-RDPEA) plugs into
+# this so RDP clients get real audio; Chromium and Wine play into the null sink
+# when no RDP client is connected.
+
+# Create the runtime socket that xrdp and the pulse client conf point at.
+load-module module-native-protocol-unix socket=/run/pulse/native auth-anonymous=1 socket-permissions=0666
+
+# Always-present sink so Chromium never fails with "audio device not found".
+load-module module-null-sink sink_name=rdp_sink sink_properties=device.description=RDP_Audio rate=48000 channels=2
+set-default-sink rdp_sink
+
+# Auto-detect ALSA devices / RDP audio module if the kernel or chansrv provides them.
+.ifexists module-udev-detect.so
+load-module module-udev-detect
+.endif
+
+.ifexists module-xrdp-sink.so
+load-module module-xrdp-sink sink_name=xrdp_sink rate=48000 channels=2
+set-default-sink xrdp_sink
+.endif
+
+.ifexists module-xrdp-source.so
+load-module module-xrdp-source source_name=xrdp_source rate=48000 channels=2
+set-default-source xrdp_source
+.endif
+
+# Mixing/resampling quality that stays cheap on a small Railway container.
+load-module module-always-sink
+load-module module-intended-roles
